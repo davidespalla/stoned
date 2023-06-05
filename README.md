@@ -7,7 +7,7 @@ Stoned provides a series of functions for to streamline the  analysis of neural 
 # Installation
 
 ## Prerequisites
-- Python 3.9 or above 
+- Python 3.7 or above 
 
 ## Install from source
 
@@ -20,7 +20,7 @@ conda activate stoned_env
 Then installing `stoned` with `pip` by cloning the github repository locally:
 ```bash
 git clone https://github.com/davidespalla/stoned.git
-cd comma
+cd stoned
 python -m pip install .
 
 ```
