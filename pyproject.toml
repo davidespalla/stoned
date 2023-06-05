@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "stoned"
+version = "0.1.0"
+description = "Software tools for neural data"
+authors = ["davidespalla <davide.spalla@gmail.com>"]
+license = "Apache 2"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+numpy = "^1.24.3"
+scipy = "^1.10.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
