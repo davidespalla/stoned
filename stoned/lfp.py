@@ -1,144 +1,149 @@
+"""
+Functions for local field potential (LFP) time-frequency analysis
+"""
+
 import numpy as np
-import random
-from scipy.ndimage import gaussian_filter1d
-from collections import Counter
-
-def prepare_data(trajectory,spikes,times,resampling_factor):
-    #builds spike count matrix
-    start_time = times[0]
-    end_time = times[-1]
-    n_bins = int(np.floor(trajectory.shape[1]/resampling_factor))
-    X = np.empty((len(spikes),n_bins))
-    time_bins = np.linspace(start_time,end_time,n_bins+1)
-    for cell in range(len(spikes)):
-           X[cell][:] = np.histogram(spikes[cell],bins=time_bins)[0]
-            
-    X = X.T
-        
-            
-    # resample trajectory at same timescale as spike count matrix
-    resampled_trajectory = np.empty((trajectory.shape[0],n_bins))
-    for i in range(n_bins):
-        resampled_trajectory[0][i] = np.mean(trajectory[0][resampling_factor*i:resampling_factor*(i+1)])
-        resampled_trajectory[1][i] = np.mean(trajectory[1][resampling_factor*i:resampling_factor*(i+1)])
-        
-               
-    return resampled_trajectory,X
-
-def resample_ethogram(ethogram,times,resampling_factor):
-    start_time = times[0]
-    end_time = times[-1]
-    n_bins=int(np.floor(len(ethogram)/resampling_factor))
-            
-    # use majority rule to resample ethogram
-    resampled_ethogram=np.empty(n_bins)
-    for i in range(n_bins):
-        counter = Counter(ethogram[resampling_factor*i:resampling_factor*(i+1)])
-        resampled_ethogram[i]=counter.most_common(1)[0][0]
-      
-    return resampled_ethogram
+from scipy.signal import butter
+from scipy.signal import sosfilt
+from pywt import scale2frequency
+from pywt import cwt
 
 
-def bin_spikes(spikes,times,resampling_factor):
-    #builds spike count matrix
-    start_time = times[0]
-    end_time = times[-1]
-    n_bins = int(np.floor(times.shape[0]/resampling_factor))
-    X = np.empty((len(spikes),n_bins))
-    time_bins = np.linspace(start_time,end_time,n_bins+1)
-    for cell in range(len(spikes)):
-           X[cell][:] = np.histogram(spikes[cell],bins=time_bins)[0]
-            
-    X = X.T    
-               
-    return X
+def bandpass_filter(signal, low_f, high_f, sampling_rate=1.0, filter_order=5):
+    """
+    Apply a bandpass filter to the input signal using a Butterworth filter.
 
-def calculate_speed(x,y,dt,smooth = False,sigma =1 ):
-    v=np.zeros(len(x))
-    for i in range(1,len(v)):
-        v[i]=np.sqrt(pow(x[i]-x[i-1],2)+pow(y[i]-y[i-1],2))/dt
-    if smooth:
-        v = gaussian_filter1d(v,sigma)
+    Parameters
+    ----------
+    signal : array-like
+        The input signal to filter.
 
-    return v
+    low_f : float
+        The lower bound of the frequency band.
 
-def exlude_high_firing(spikes,tot_time,rate_th):
-    filtered_spikes=[]
-    for cell in range(len(spikes)):
-        if len(spikes[cell])/tot_time < rate_th:
-            filtered_spikes.append(spikes[cell])
-        else:
-            filtered_spikes.append(np.nan)
-    return filtered_spikes
+    high_f : float
+        The upper bound of the frequency band.
 
-def speed_mask(x,y,frame_dt,pixel_to_cm,velocity_th=3):
-    conversion_factor = pixel_to_cm/frame_dt
-    v=np.zeros(len(x))
-    mask=np.zeros(len(x))
-    for i in range(1,len(v)):
-        v[i]=np.sqrt(pow(x[i]-x[i-1],2)+pow(y[i]-y[i-1],2))*conversion_factor
-        if v[i]>=velocity_th:
-            mask[i]=1
-    return mask
+    sampling_rate : float, optional
+        The sampling rate of the signal. Defaults to 1.0 if not specified.
 
-def box_mask(x,y,box_range):
-    xmin = box_range[0],
-    xmax = box_range[1]
-    ymin = box_range[2]
-    ymax = box_range[3]
-    #1120,ymin=200,ymax=870
-    mask=np.zeros(len(x))
-    for i in range(len(mask)):
-        if x[i]>xmin and x[i]<xmax and y[i]>ymin and y[i]<ymax:
-            mask[i]=1
-    return mask
+    filter_order : int, optional
+        The order of the Butterworth filter. Defaults to 5 if not specified.
 
-def align_trajectory(trajectory,recording_mask):
-    out_x = trajectory[0][:-1][recording_mask]
-    out_y = trajectory[1][:-1][recording_mask]
-    return np.asarray([out_x,out_y])
+    Returns
+    -------
+    filtered_signal : ndarray
+        The filtered signal.
 
-def align_facing(facing,recording_mask):
-    return facing[:-1][recording_mask]
+    Notes
+    -----
+    The Butterworth filter is implemented using the `sosfilt` function from `scipy.signal`.
 
-def align_ethogram(ethogram,recording_mask):
-    return ethogram[:-1][recording_mask]
+    Examples
+    --------
+    >>> signal = np.random.randn(1000)  # Random input signal
+    >>> low_f = 1.0  # Lower bound of the frequency band
+    >>> high_f = 10.0  # Upper bound of the frequency band
+    >>> filtered_signal = bandpass_filter(signal, low_f, high_f, sampling_rate=100.0)
 
-def enhance_box_range(box_range,pixels):
-    out = box_range
-    out[0] = out[0] -pixels
-    out[1] = out[1] +pixels
-    out[2] = out[2] -pixels
-    out[3] = out[3] +pixels
-    return out
-
-def shuffle_activity(X):
-    Xs = np.copy(X)
-    Xs = Xs.T
-    for i in range(len(Xs)):
-        Xs[i][:] = random.sample(list(Xs[i]),len(Xs[i]))
-    return Xs.T
+    """
+    filter = butter(filter_order, [low_f, high_f],
+                    btype='band', output='sos', fs=sampling_rate)
+    filtered_signal = sosfilt(filter, signal)
+    return filtered_signal
 
 
-def skaggs_info_persec(rate_map,occupancy_prob,epsilon=pow(10,-15)):
-    rate_map = rate_map.flatten()
-    occupancy_prob = occupancy_prob.flatten()
-    avg_rate = np.mean(rate_map)
-    if avg_rate >0:
-        return sum(rate_map*np.log2((rate_map+epsilon)/avg_rate)*occupancy_prob)
-    else:
-        return np.nan
+def morlet_transform(signal, low_f, high_f, n_freqs=20, sampling_rate=1.0):
+    """
+    Apply the Morlet transform to the input signal within a specified frequency band.
 
-def skaggs_info_perspike(rate_map,occupancy_prob,epsilon=pow(10,-15)):
-    rate_map = rate_map.flatten()
-    occupancy_prob = occupancy_prob.flatten()
-    avg_rate = np.mean(rate_map)
-    if avg_rate >0:
-        return sum(rate_map*np.log2((rate_map+epsilon)/avg_rate)*occupancy_prob)/avg_rate
-    else:
-        return np.nan
-    
-def cosine_similarity(A,B):
-    A[isnan(A)]=0
-    B[isnan(B)]=0
-    return np.dot(A.flatten(),B.flatten())/(linalg.norm(A.flatten())*linalg.norm(B.flatten()))
+    Parameters
+    ----------
+    signal : array-like
+        The input signal to transform.
+
+    low_f : float
+        The lower bound of the frequency band.
+
+    high_f : float
+        The upper bound of the frequency band.
+
+    n_freqs : int, optional
+        The number of frequencies to use for the transform. Defaults to 20.
+
+    sampling_rate : float, optional
+        The sampling rate of the signal. Defaults to 1.0 if not specified.
+
+    Returns
+    -------
+    C : ndarray
+        The complex Morlet transform coefficients.
+
+    freq : ndarray
+        The frequencies associated with the transform coefficients.
+
+    Notes
+    -----
+    The Morlet transform is performed using the continuous wavelet transform (CWT)
+    with the 'cmor1-0.5' wavelet.
+
+    Examples
+    --------
+    >>> signal = np.random.randn(1000)  # Random input signal
+    >>> low_f = 1.0  # Lower bound of the frequency band
+    >>> high_f = 10.0  # Upper bound of the frequency band
+    >>> C, freq = morlet_transform(signal, low_f, high_f, n_freqs=20, sampling_rate=100.0)
+
+    """
+    frequencies = np.linspace(low_f, high_f, n_freqs)/sampling_rate
+    scales = scale2frequency('cmor1-0.5', frequencies)
+    C, freq = cwt(signal, wavelet='cmor1-0.5', scales=scales,
+                  sampling_period=1.0/sampling_rate)
+    return C, freq
+
+
+def compute_power(signal, low_f, high_f, sampling_rate=1.0, n_freqs=20):
+    """
+    Compute the instantaneous power of the signal within a specified frequency band.
+
+    Parameters
+    ----------
+    signal : array-like
+        The input signal.
+
+    low_f : float
+        The lower bound of the frequency band.
+
+    high_f : float
+        The upper bound of the frequency band.
+
+    sampling_rate : float, optional
+        The sampling rate of the signal. Defaults to 1.0 if not specified.
+
+    n_freqs : int, optional
+        The number of frequencies used for the Morlet transform used to compute the power.
+        Defaults to 20.
+
+    Returns
+    -------
+    power : ndarray
+        The computed power timecourse.
+
+    Notes
+    -----
+    The power is computed by performing a Morlet transform on the input signal
+    within the specified frequency band. The average absolute value of the transform
+    coefficients is taken along the frequency axis to obtain the power at each timepoint.
+
+    Examples
+    --------
+    >>> signal = np.random.randn(1000)  # Random input signal
+    >>> low_f = 1.0  # Lower bound of the frequency band
+    >>> high_f = 10.0  # Upper bound of the frequency band
+    >>> power_spectrum = compute_power(signal, low_f, high_f, sampling_rate=100.0, n_freqs=20)
+    """
+
+    C, freq = morlet_transform(
+        signal, low_f, high_f, sampling_rate=sampling_rate, n_freqs=n_freqs)
+    power = np.mean(abs(C), axis=0)
+    return power
