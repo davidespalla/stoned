@@ -1,54 +1,148 @@
 import numpy as np
 
 
-def compute_ratemap1d(spike_list, x, t, bins):
-    '''
-    s: 2d list
-    x: array-like
-    t: array-like 
-    bins: array-like 
+def compute_ratemap1d(s, x, t, bins):
+    """
+    Compute the rate map for 1-dimensional spatial data.
 
-    return: ratemaps
+    Parameters
+    ----------
+    s : list
+        Spike times.
 
-    '''
-    # compute dt from time axis
-    dt = t[1]-t[0]
-    # find spike positions
-    spike_positions = [np.interp(s, x, t) for s in spike_list]
-    # compute histogram of spike counts and put it into matrix
-    spikes_hist = [np.histogram(s, bins)[0] for s in spike_positions]
-    spikes_hist = np.vstack(spikes_hist).astype(np.float64)
+    x : array-like
+        Array of occupied positions.
 
-    # compute occupancy
-    occupancy = np.histogram(x, bins)[0]*dt
+    t : array-like
+        Times associated with the position values, should be in the same units of s.
+
+    bins : array-like
+        Spatial bins for dividing the 1-dimensional space, should be in the same units of x.
+
+    Returns
+    -------
+    ratemap : ndarray
+        The computed rate map.
+
+    Notes
+    -----
+    The rate map is a representation of the average firing rate as a function of position.
+    The rate map is obtained by dividing the spike count histogram by the occupancy,
+    ignoring any division errors (resulting in NaN values).
+
+    Examples
+    --------
+    >>> s = [1,12.3,50.1,60.3] # Spike times
+    >>> x = np.linspace(0,1) # Position values
+    >>> t = np.linspace(0,100)  # Times
+    >>> bins = np.linspace(0, 1, 10)  # Spatial bins
+    >>> ratemap = compute_ratemap1d(s, x, t, bins)
+
+    """
+
+    dt = t[1]-t[0]  # compute dt from time axis
+    spike_positions = np.interp(s, x, t)  # find spike positions
+    # compute histogram of spike counts
+    spike_hist = np.histogram(spike_positions, bins)[0]
+    occupancy = np.histogram(x, bins)[0]*dt  # compute occupancy of positions
 
     # divide by occupancy, do not display division error (will be nan values)
     with np.errstate(divide='ignore', invalid='ignore'):
-        ratemaps = spikes_hist / occupancy
+        ratemap = spike_hist / occupancy
 
-    # return ratemaps as matrix (neurons x bins)
-    return ratemaps
+    return ratemap
 
 
 def spatial_info_perspike(rate_map, occupancy_prob, epsilon=pow(10, -15)):
-    '''
-    takes ratemap and occupancy probability, returns skaggs information (bit/spike)
-    '''
+    """
+    Compute the Skaggs information (bits per spike) based on the rate map and occupancy probability.
+
+    Parameters
+    ----------
+    rate_map : ndarray
+        The rate map representing the firing rate at each spatial location.
+
+    occupancy_prob : ndarray
+        The occupancy probability corresponding to each spatial location (must sum to 1 and be of the
+        same shape as rate_map).
+
+    epsilon : float, optional
+        A small value added to the rate map to avoid division by zero. Defaults to 1e-15.
+
+    Returns
+    -------
+    info_per_spike : float
+        The computed Skaggs information in bits per spike.
+
+    Notes
+    -----
+    The Skaggs information quantifies the spatial information content per spike.
+    The rate map and occupancy probability should have the same shape.
+    If the average rate is zero, the result will be NaN.
+
+    Examples
+    --------
+    >>> rate_map = np.array([0.5, 1.2, 0.8, 0.3])  # Example rate map
+    # Example occupancy probability
+    >>> occupancy_prob = np.array([0.1, 0.3, 0.4, 0.2])
+    >>> info_per_spike = spatial_info_perspike(rate_map, occupancy_prob, epsilon=1e-15)
+
+    """
+
     rate_map = rate_map.flatten()
     occupancy_prob = occupancy_prob.flatten()
-    avg_rate = np.mean(rate_map*occupancy_prob)
+
+    assert(np.sum(occupancy_prob) == 1, "Sum of occupancy_prob must be = 1")
+
+    avg_rate = np.mean(rate_map)
     if avg_rate > 0:
         return sum(rate_map*np.log2((rate_map+epsilon)/avg_rate)*occupancy_prob)/avg_rate
     else:
         return np.nan
-    
+
+
 def spatial_info_persec(rate_map, occupancy_prob, epsilon=pow(10, -15)):
-    '''
-    takes ratemap and occupancy probability, returns skaggs information (bit/seconds)
-    '''
+    """
+    Compute the Skaggs information (bits per second) based on the rate map and occupancy probability.
+
+    Parameters
+    ----------
+    rate_map : ndarray
+        The rate map representing the firing rate at each spatial location.
+
+    occupancy_prob : ndarray
+        The occupancy probability corresponding to each spatial location (must sum to 1 and be of the
+        same shape as rate_map).
+
+    epsilon : float, optional
+        A small value added to the rate map to avoid division by zero. Defaults to 1e-15.
+
+    Returns
+    -------
+    info_per_second : float
+        The computed Skaggs information in bits per second.
+
+    Notes
+    -----
+    The Skaggs information quantifies the spatial information content per spike.
+    The rate map and occupancy probability should have the same shape.
+    If the average rate is zero, the result will be NaN.
+
+    Examples
+    --------
+    >>> rate_map = np.array([0.5, 1.2, 0.8, 0.3])  # Example rate map
+    # Example occupancy probability
+    >>> occupancy_prob = np.array([0.1, 0.3, 0.4, 0.2])
+    >>> info_per_secodn = spatial_info_persec(rate_map, occupancy_prob, epsilon=1e-15)
+
+    """
+
     rate_map = rate_map.flatten()
     occupancy_prob = occupancy_prob.flatten()
-    avg_rate = np.mean(rate_map*occupancy_prob)
+
+    assert(np.sum(occupancy_prob) == 1, "Sum of occupancy_prob must be = 1")
+
+    avg_rate = np.mean(rate_map)
     if avg_rate > 0:
         return sum(rate_map*np.log2((rate_map+epsilon)/avg_rate)*occupancy_prob)
     else:
