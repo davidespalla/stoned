@@ -26,3 +26,9 @@ python -m pip install .
 ```
 
 That's it! After following these steps, you should be able to use the functions in `stoned` within the virtual environment.
+
+
+# Structure
+
+- `lfp` provides functions for signal processing and frequency analysis of local field potential data.
+- `spatial` provides function for standard analysis of spatial coding such as ratemaps calculation and skaggs spatial information.
